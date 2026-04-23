@@ -1,0 +1,105 @@
+// ──────────────────────────────────────────────────────────────
+// CloudWatch Synthetics canary script
+// ──────────────────────────────────────────────────────────────
+// This script is rendered by Terraform's templatefile() function.
+// The monitors list below is injected from variables.tf.
+//
+// Each endpoint runs as its own executeHttpStep(), which emits
+// a separate SuccessPercent metric in CloudWatch. This lets us
+// create per-endpoint alarms even though there's only one canary.
+//
+// Runtime: syn-nodejs-puppeteer-13.1
+// ──────────────────────────────────────────────────────────────
+
+const { URL } = require('url');
+const synthetics = require('@aws/synthetics-puppeteer');
+const log = require('@aws/synthetics-logger');
+
+// Endpoint list injected by Terraform at deploy time
+const monitors = ${jsonencode(monitors)};
+
+// ── Response validators ─────────────────────────────────────
+// "website" type: just check for a successful HTTP status code.
+// "api" type: also validate the response body contains expected data.
+
+function validateResponse(monitor) {
+  return async function (response) {
+    // Fail on any 4xx/5xx status
+    if (response.statusCode < 200 || response.statusCode >= 400) {
+      throw new Error(monitor.name + ' returned HTTP ' + response.statusCode);
+    }
+
+    if (monitor.type === 'api') {
+      const body = response.body;
+
+      if (!body || body.length === 0) {
+        throw new Error(monitor.name + ' returned empty response body');
+      }
+
+      // GitHub Status: verify the JSON has the expected structure
+      if (monitor.name === 'github-status') {
+        const data = JSON.parse(body);
+        if (!data.status || !data.status.indicator) {
+          throw new Error('GitHub status response missing status.indicator');
+        }
+        log.info('GitHub status indicator: ' + data.status.indicator);
+      }
+
+      // Azure DevOps: verify the JSON has a status field
+      if (monitor.name === 'azure-devops-status') {
+        const data = JSON.parse(body);
+        if (!data.status) {
+          throw new Error('Azure DevOps status response missing status field');
+        }
+        log.info('Azure DevOps status: ' + JSON.stringify(data.status));
+      }
+
+      // MS Graph API: $metadata returns XML — check it contains the schema namespace
+      if (monitor.name === 'ms-graph-api') {
+        if (!body.includes('microsoft.graph')) {
+          throw new Error('MS Graph $metadata response missing microsoft.graph namespace');
+        }
+        log.info('MS Graph $metadata response validated');
+      }
+    }
+  };
+}
+
+// ── Main handler ────────────────────────────────────────────
+exports.handler = async () => {
+  for (const monitor of monitors) {
+    const url = new URL(monitor.url);
+
+    const requestOptions = {
+      hostname: url.hostname,
+      path:     url.pathname + url.search,
+      port:     url.port || (url.protocol === 'https:' ? 443 : 80),
+      protocol: url.protocol,
+      method:   'GET',
+      headers:  {
+        'User-Agent': 'Amazon-CloudWatch-Synthetics',
+      },
+    };
+
+    // continueOnStepFailure = true: if one endpoint fails,
+    // keep checking the rest so every endpoint gets a metric.
+    // includeResponseBody must be true for API endpoints so the
+    // validation callback can inspect the response body.
+    const stepConfig = {
+      includeRequestHeaders:  false,
+      includeResponseHeaders: false,
+      includeRequestBody:     false,
+      includeResponseBody:    monitor.type === 'api',
+      continueOnStepFailure:  true,
+    };
+
+    log.info('Checking ' + monitor.name + ': ' + monitor.url);
+
+    await synthetics.executeHttpStep(
+      monitor.name,
+      requestOptions,
+      validateResponse(monitor),
+      stepConfig
+    );
+  }
+};

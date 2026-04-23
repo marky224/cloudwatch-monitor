@@ -1,0 +1,14 @@
+# Terraform state — contains secrets, never commit
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Variable overrides with sensitive values
+terraform.tfvars
+
+# Generated canary zip (built by Terraform's archive_file)
+canary-script/canary.zip
+
+# OS files
+.DS_Store

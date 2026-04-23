@@ -1,0 +1,4 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored so your email stays out of version control.
+
+alert_email = "your-email@example.com"
