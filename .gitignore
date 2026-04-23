@@ -10,5 +10,8 @@ terraform.tfvars
 # Generated canary zip (built by Terraform's archive_file)
 canary-script/canary.zip
 
+# Generated Lambda zip (built by Terraform's archive_file)
+status-page/generate-status.zip
+
 # OS files
 .DS_Store

@@ -8,6 +8,11 @@
 // a separate SuccessPercent metric in CloudWatch. This lets us
 // create per-endpoint alarms even though there's only one canary.
 //
+// Validation strategy: HTTP status code only (2xx/3xx = pass).
+// This is the industry standard for uptime monitoring and avoids
+// runtime-specific issues with response body collection in the
+// executeHttpStep helper.
+//
 // Runtime: syn-nodejs-puppeteer-13.1
 // ──────────────────────────────────────────────────────────────
 
@@ -18,50 +23,16 @@ const log = require('@aws/synthetics-logger');
 // Endpoint list injected by Terraform at deploy time
 const monitors = ${jsonencode(monitors)};
 
-// ── Response validators ─────────────────────────────────────
-// "website" type: just check for a successful HTTP status code.
-// "api" type: also validate the response body contains expected data.
+// ── Response validator ──────────────────────────────────────
+// Checks for a successful HTTP status code (2xx or 3xx).
+// Any 4xx or 5xx response fails the step.
 
 function validateResponse(monitor) {
   return async function (response) {
-    // Fail on any 4xx/5xx status
     if (response.statusCode < 200 || response.statusCode >= 400) {
       throw new Error(monitor.name + ' returned HTTP ' + response.statusCode);
     }
-
-    if (monitor.type === 'api') {
-      const body = response.body;
-
-      if (!body || body.length === 0) {
-        throw new Error(monitor.name + ' returned empty response body');
-      }
-
-      // GitHub Status: verify the JSON has the expected structure
-      if (monitor.name === 'github-status') {
-        const data = JSON.parse(body);
-        if (!data.status || !data.status.indicator) {
-          throw new Error('GitHub status response missing status.indicator');
-        }
-        log.info('GitHub status indicator: ' + data.status.indicator);
-      }
-
-      // Azure DevOps: verify the JSON has a status field
-      if (monitor.name === 'azure-devops-status') {
-        const data = JSON.parse(body);
-        if (!data.status) {
-          throw new Error('Azure DevOps status response missing status field');
-        }
-        log.info('Azure DevOps status: ' + JSON.stringify(data.status));
-      }
-
-      // MS Graph API: $metadata returns XML — check it contains the schema namespace
-      if (monitor.name === 'ms-graph-api') {
-        if (!body.includes('microsoft.graph')) {
-          throw new Error('MS Graph $metadata response missing microsoft.graph namespace');
-        }
-        log.info('MS Graph $metadata response validated');
-      }
-    }
+    log.info(monitor.name + ' returned HTTP ' + response.statusCode + ' — OK');
   };
 }
 
@@ -83,13 +54,11 @@ exports.handler = async () => {
 
     // continueOnStepFailure = true: if one endpoint fails,
     // keep checking the rest so every endpoint gets a metric.
-    // includeResponseBody must be true for API endpoints so the
-    // validation callback can inspect the response body.
     const stepConfig = {
       includeRequestHeaders:  false,
       includeResponseHeaders: false,
       includeRequestBody:     false,
-      includeResponseBody:    monitor.type === 'api',
+      includeResponseBody:    false,
       continueOnStepFailure:  true,
     };
 

@@ -30,6 +30,12 @@ variable "canary_interval_minutes" {
   default     = 30
 }
 
+variable "status_page_domain" {
+  description = "Custom domain for the public status page (e.g. status.markandrewmarquez.com)"
+  type        = string
+  default     = "status.markandrewmarquez.com"
+}
+
 # ──────────────────────────────────────────────────────────────
 # Monitored endpoints
 # ──────────────────────────────────────────────────────────────

@@ -47,7 +47,7 @@ resource "aws_cloudwatch_metric_alarm" "endpoint_alarms" {
   # interval, this means the endpoint must fail twice in a row
   # (1 hour) before the alarm fires — avoids false positives
   # from a single transient failure.
-  evaluation_periods = 2
+  evaluation_periods  = 2
   datapoints_to_alarm = 2
 
   metric_name = "SuccessPercent"

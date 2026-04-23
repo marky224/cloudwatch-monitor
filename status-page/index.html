@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Service Status — Mark Marquez</title>
+  <style>
+    /* ── Reset & Base ──────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #f8f9fb;
+      --surface:     #ffffff;
+      --border:      #e2e5ea;
+      --text:        #1a1d23;
+      --text-dim:    #6b7280;
+      --green:       #16a34a;
+      --green-bg:    #dcfce7;
+      --green-bar:   #22c55e;
+      --amber:       #d97706;
+      --amber-bg:    #fef3c7;
+      --amber-bar:   #f59e0b;
+      --red:         #dc2626;
+      --red-bg:      #fee2e2;
+      --red-bar:     #ef4444;
+      --gray:        #9ca3af;
+      --gray-bar:    #d1d5db;
+      --radius:      10px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ────────────────────────────────────────────── */
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 20px 60px;
+    }
+
+    /* ── Header ────────────────────────────────────────────── */
+    .header {
+      margin-bottom: 32px;
+    }
+
+    .header h1 {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+
+    .header .subtitle {
+      font-size: 14px;
+      color: var(--text-dim);
+    }
+
+    .header .subtitle a {
+      color: var(--text-dim);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .header .subtitle a:hover {
+      color: var(--text);
+    }
+
+    /* ── Overall Status Banner ─────────────────────────────── */
+    .overall-banner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 22px;
+      border-radius: var(--radius);
+      margin-bottom: 32px;
+      font-weight: 600;
+      font-size: 15px;
+    }
+
+    .overall-banner.operational {
+      background: var(--green-bg);
+      color: var(--green);
+    }
+
+    .overall-banner.degraded {
+      background: var(--amber-bg);
+      color: var(--amber);
+    }
+
+    .overall-banner.outage {
+      background: var(--red-bg);
+      color: var(--red);
+    }
+
+    .overall-banner.unknown {
+      background: #f3f4f6;
+      color: var(--gray);
+    }
+
+    .overall-banner.loading {
+      background: #f3f4f6;
+      color: var(--gray);
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-dot.operational { background: var(--green); }
+    .status-dot.degraded    { background: var(--amber); }
+    .status-dot.outage      { background: var(--red);   }
+    .status-dot.unknown     { background: var(--gray);  }
+    .status-dot.loading     { background: var(--gray);  }
+
+    /* ── Endpoint Cards ────────────────────────────────────── */
+    .endpoints {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      background: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .endpoint {
+      background: var(--surface);
+      padding: 20px 22px;
+    }
+
+    .endpoint-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .endpoint-name {
+      font-weight: 600;
+      font-size: 14px;
+      flex: 1;
+    }
+
+    .endpoint-type {
+      font-size: 11px;
+      color: var(--text-dim);
+      background: var(--bg);
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 500;
+    }
+
+    .endpoint-uptime {
+      font-size: 14px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .endpoint-uptime.operational { color: var(--green); }
+    .endpoint-uptime.degraded    { color: var(--amber); }
+    .endpoint-uptime.outage      { color: var(--red);   }
+    .endpoint-uptime.unknown     { color: var(--gray);  }
+
+    /* ── 90-Day Uptime Bar ─────────────────────────────────── */
+    .uptime-bar {
+      display: flex;
+      gap: 1.5px;
+      height: 28px;
+      margin-bottom: 6px;
+    }
+
+    .uptime-bar .day {
+      flex: 1;
+      border-radius: 2px;
+      position: relative;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .uptime-bar .day:hover {
+      opacity: 0.75;
+    }
+
+    .uptime-bar .day.up      { background: var(--green-bar); }
+    .uptime-bar .day.degraded { background: var(--amber-bar); }
+    .uptime-bar .day.down    { background: var(--red-bar);   }
+    .uptime-bar .day.nodata  { background: var(--gray-bar);  }
+
+    /* Tooltip */
+    .uptime-bar .day .tooltip {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--text);
+      color: #fff;
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      z-index: 10;
+      pointer-events: none;
+      font-weight: 500;
+    }
+
+    .uptime-bar .day:hover .tooltip {
+      display: block;
+    }
+
+    .uptime-range {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* ── Uptime Summary Row ────────────────────────────────── */
+    .uptime-summary {
+      display: flex;
+      gap: 16px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    .uptime-stat {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .uptime-stat strong {
+      color: var(--text);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Footer ────────────────────────────────────────────── */
+    .footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-dim);
+      line-height: 1.8;
+    }
+
+    .footer a {
+      color: var(--text-dim);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .footer a:hover { color: var(--text); }
+
+    .last-updated {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Loading / Error ───────────────────────────────────── */
+    .loading-msg {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-dim);
+      font-size: 14px;
+    }
+
+    .error-msg {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--red);
+      font-size: 14px;
+      background: var(--red-bg);
+      border-radius: var(--radius);
+    }
+
+    /* ── Responsive ────────────────────────────────────────── */
+    @media (max-width: 480px) {
+      .container { padding: 24px 16px 40px; }
+      .uptime-bar { height: 22px; }
+      .uptime-summary { flex-wrap: wrap; gap: 8px 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>Service Status</h1>
+      <div class="subtitle">Monitoring for <a href="https://markandrewmarquez.com" target="_blank" rel="noopener">Mark Marquez</a>'s infrastructure</div>
+    </div>
+
+    <!-- Overall status banner -->
+    <div id="overall-banner" class="overall-banner loading">
+      <div class="status-dot loading"></div>
+      <span>Loading status…</span>
+    </div>
+
+    <!-- Endpoint list (rendered by JS) -->
+    <div id="endpoints-container">
+      <div class="loading-msg">Fetching current status…</div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div class="last-updated" id="last-updated"></div>
+      <div>Powered by <a href="https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Canaries.html" target="_blank" rel="noopener">AWS CloudWatch Synthetics</a></div>
+    </div>
+  </div>
+
+  <script>
+    // ── Status labels ─────────────────────────────────────────
+    const STATUS_LABELS = {
+      operational: 'All Systems Operational',
+      degraded:    'Partial System Degradation',
+      outage:      'Service Outage Detected',
+      unknown:     'Gathering Data…',
+    };
+
+    // ── Formatting helpers ────────────────────────────────────
+    function fmtPct(val) {
+      if (val === null || val === undefined) return '—';
+      return val.toFixed(2) + '%';
+    }
+
+    function fmtDate(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00Z');
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    }
+
+    function statusForUptime(val) {
+      if (val === null || val === undefined) return 'unknown';
+      if (val >= 100)  return 'operational';
+      if (val >= 90)   return 'degraded';
+      return 'outage';
+    }
+
+    function dayClass(uptime) {
+      if (uptime === null || uptime === undefined) return 'nodata';
+      if (uptime >= 100)  return 'up';
+      if (uptime >= 90)   return 'degraded';
+      return 'down';
+    }
+
+    // ── Render the status page ────────────────────────────────
+    function render(data) {
+      // Overall banner
+      const banner = document.getElementById('overall-banner');
+      const status = data.overall_status || 'unknown';
+      banner.className = 'overall-banner ' + status;
+      banner.innerHTML = `
+        <div class="status-dot ${status}"></div>
+        <span>${STATUS_LABELS[status] || status}</span>
+      `;
+
+      // Endpoints
+      const container = document.getElementById('endpoints-container');
+
+      if (!data.endpoints || data.endpoints.length === 0) {
+        container.innerHTML = '<div class="loading-msg">No endpoints configured.</div>';
+        return;
+      }
+
+      let html = '<div class="endpoints">';
+
+      for (const ep of data.endpoints) {
+        const epStatus = ep.status || 'unknown';
+        const uptimePct = fmtPct(ep.uptime_90d);
+        const history = ep.daily_history || [];
+
+        // Build the 90-day bar
+        let barHtml = '';
+        for (const day of history) {
+          const cls = dayClass(day.uptime);
+          const label = day.uptime !== null ? fmtPct(day.uptime) : 'No data';
+          barHtml += `<div class="day ${cls}"><span class="tooltip">${fmtDate(day.date)}: ${label}</span></div>`;
+        }
+
+        html += `
+          <div class="endpoint">
+            <div class="endpoint-header">
+              <div class="status-dot ${epStatus}"></div>
+              <span class="endpoint-name">${ep.display_name}</span>
+              <span class="endpoint-type">${ep.type}</span>
+              <span class="endpoint-uptime ${epStatus}">${uptimePct}</span>
+            </div>
+            <div class="uptime-bar">${barHtml}</div>
+            <div class="uptime-range">
+              <span>90 days ago</span>
+              <span>Today</span>
+            </div>
+            <div class="uptime-summary">
+              <div class="uptime-stat"><strong>${fmtPct(ep.uptime_24h)}</strong> 24h</div>
+              <div class="uptime-stat"><strong>${fmtPct(ep.uptime_7d)}</strong> 7d</div>
+              <div class="uptime-stat"><strong>${fmtPct(ep.uptime_30d)}</strong> 30d</div>
+              <div class="uptime-stat"><strong>${fmtPct(ep.uptime_90d)}</strong> 90d</div>
+            </div>
+          </div>
+        `;
+      }
+
+      html += '</div>';
+      container.innerHTML = html;
+
+      // Last updated
+      const ts = data.last_updated;
+      if (ts) {
+        const d = new Date(ts);
+        document.getElementById('last-updated').textContent =
+          'Last updated: ' + d.toLocaleString('en-US', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          });
+      }
+    }
+
+    // ── Fetch status.json and render ──────────────────────────
+    async function fetchStatus() {
+      try {
+        const resp = await fetch('status.json?t=' + Date.now());
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        render(data);
+      } catch (err) {
+        console.error('Failed to load status:', err);
+        // Only show error if this is the first load (no data rendered yet)
+        const container = document.getElementById('endpoints-container');
+        if (container.querySelector('.loading-msg')) {
+          container.innerHTML =
+            '<div class="error-msg">Unable to load status data. The status page may still be initializing — try again in a few minutes.</div>';
+        }
+      }
+    }
+
+    // Initial fetch + auto-refresh every 60 seconds
+    fetchStatus();
+    setInterval(fetchStatus, 60000);
+  </script>
+</body>
+</html>
