@@ -5,6 +5,8 @@ A lightweight, budget-friendly infrastructure monitoring system built on AWS Clo
 **Live status page:** [status.markandrewmarquez.com](https://status.markandrewmarquez.com)  
 **Monthly cost:** ~$1.73 (single canary at 30-min intervals; Lambda, S3, CloudFront, and CloudWatch fall within free tier)
 
+![Public status page showing all 7 endpoints](images/status-page.jpg)
+
 ---
 
 ## What It Monitors
@@ -46,6 +48,8 @@ CloudWatch Synthetics Canary (every 30 min)
 
 CloudWatch Synthetics charges per canary, not per check. By running all endpoints as separate `executeHttpStep()` calls inside a single canary, each endpoint still gets its own `SuccessPercent` metric and its own CloudWatch Alarm — but the bill stays at ~$1.73/month instead of ~$12.
 
+![Synthetics canary detail page showing success rate over time](images/canary-console.jpg)
+
 ---
 
 ## Prerequisites
@@ -85,6 +89,8 @@ terraform plan    # Review what will be created
 terraform apply   # Type "yes" to deploy
 ```
 
+![Terraform apply output showing created resources and outputs](images/terraform-apply.jpg)
+
 ### 3. Add the ACM validation DNS record (during apply)
 
 > **This is the step most likely to trip you up.** Terraform will pause and wait while it validates the SSL certificate. Don't panic — it's waiting for you to add a DNS record.
@@ -110,11 +116,15 @@ After `terraform apply` finishes:
 
 AWS sends a confirmation email to the address in `terraform.tfvars` after the first apply. **You must click the confirmation link** or alarm notifications will not be delivered.
 
+![Example alarm notification email from SNS](images/alarm-email.jpg)
+
 ### 6. Verify everything is running
 
 - **Canary:** [CloudWatch Synthetics console](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#synthetics:canary/list) — look for a green "Running" status
 - **Dashboard:** Run `terraform output dashboard_url` and open the link
 - **Status page:** Visit [status.markandrewmarquez.com](https://status.markandrewmarquez.com)
+
+![CloudWatch Alarms showing all 7 endpoints in OK state](images/cloudwatch-alarms.jpg)
 
 ---
 
@@ -161,6 +171,12 @@ cloudwatch-monitor/
 ├── .gitignore               # Excludes state files, secrets, build artifacts
 ├── canary-script/
 │   └── index.js.tftpl       # Canary script template (Terraform renders at deploy)
+├── images/
+│   ├── status-page.jpg      # Public status page with all endpoints
+│   ├── canary-console.jpg   # Synthetics canary detail + success rate graph
+│   ├── terraform-apply.jpg  # Terminal output after a successful apply
+│   ├── alarm-email.jpg      # Example SNS alarm notification email
+│   └── cloudwatch-alarms.jpg # CloudWatch Alarms list in OK state
 └── status-page/
     ├── index.html            # Public status page (static HTML/CSS/JS)
     └── generate-status.py    # Lambda function: CloudWatch metrics → status.json
