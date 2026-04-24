@@ -56,7 +56,7 @@ CloudWatch Synthetics charges per canary, not per check. By running all endpoint
 
 - [Terraform](https://developer.hashicorp.com/terraform/install) ≥ 1.5
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) with credentials configured
-- An AWS account with permissions for S3, IAM, Lambda, CloudWatch, CloudFront, ACM, and Synthetics
+- An AWS account with permissions for S3, IAM, Lambda, CloudWatch, CloudFront, ACM, Route 53, and Synthetics
 
 ```powershell
 # Install (Windows)
@@ -91,38 +91,18 @@ terraform apply   # Type "yes" to deploy
 
 ![Terraform apply output showing created resources and outputs](images/terraform-apply.jpg)
 
-### 3. Add the ACM validation DNS record (during apply)
-
-> **This is the step most likely to trip you up.** Terraform will pause and wait while it validates the SSL certificate. Don't panic — it's waiting for you to add a DNS record.
-
-When `terraform apply` reaches the ACM certificate validation, it will appear to hang. While it waits:
-
-1. Look for the `dns_1_acm_validation_record` output in your terminal — it shows the CNAME **name** and **value**
-2. Go to [GoDaddy DNS Management](https://dcc.godaddy.com/manage-dns)
-3. Add a **CNAME** record with exactly those values
-4. Wait 1–5 minutes for DNS propagation
-5. Terraform detects the validation automatically and continues the apply
-
-### 4. Add the status page CNAME (after apply)
-
-After `terraform apply` finishes:
-
-1. Find the `dns_2_status_page_cname` output — it shows the CloudFront distribution domain
-2. In GoDaddy, add another **CNAME** record:
-   - **Name:** `status`
-   - **Value:** the CloudFront domain from the output (e.g., `d1234abcd.cloudfront.net`)
-
-### 5. Confirm the SNS email subscription
+### 3. Confirm the SNS email subscription
 
 AWS sends a confirmation email to the address in `terraform.tfvars` after the first apply. **You must click the confirmation link** or alarm notifications will not be delivered.
 
 ![Example alarm notification email from SNS](images/alarm-email.jpg)
 
-### 6. Verify everything is running
+### 4. Verify everything is running
 
 - **Canary:** [CloudWatch Synthetics console](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#synthetics:canary/list) — look for a green "Running" status
-- **Dashboard:** Run `terraform output dashboard_url` and open the link
 - **Status page:** Visit [status.markandrewmarquez.com](https://status.markandrewmarquez.com)
+
+> DNS and HTTPS are fully automated — Terraform creates the Route 53 A/AAAA alias records pointing `status.markandrewmarquez.com` at CloudFront, and the ACM certificate validation CNAMEs, with no manual steps required. The status page should be live within a few minutes of a successful apply.
 
 ![CloudWatch Alarms showing all 7 endpoints in OK state](images/cloudwatch-alarms.jpg)
 
@@ -164,9 +144,9 @@ cloudwatch-monitor/
 ├── variables.tf             # Endpoints, interval, email, domain settings
 ├── canary.tf                # S3 artifacts bucket, IAM role, Synthetics canary
 ├── alarms.tf                # SNS topic + per-endpoint CloudWatch Alarms
-├── status-page.tf           # S3, CloudFront, ACM cert, Lambda, EventBridge
+├── status-page.tf           # S3, CloudFront, ACM cert, Route 53 records, Lambda, EventBridge
 ├── dashboard.tf             # CloudWatch dashboard (metrics visualization)
-├── outputs.tf               # Console URLs, DNS instructions, status page URL
+├── outputs.tf               # Console URLs, status page URL
 ├── terraform.tfvars.example # Template for sensitive variables (safe to commit)
 ├── .gitignore               # Excludes state files, secrets, build artifacts
 ├── canary-script/
@@ -192,11 +172,11 @@ Check the canary's CloudWatch Logs at `/aws/lambda/cwsyn-<canary-name>-*`. The m
 **Not receiving alarm emails**  
 Make sure you clicked the SNS subscription confirmation link. Check your spam folder. You can verify the subscription status in the [SNS console](https://console.aws.amazon.com/sns/v3/home?region=us-east-1#/subscriptions) — the status should say "Confirmed".
 
-**`terraform apply` hangs at ACM certificate**  
-This is expected — see Step 3 above. Terraform is waiting for DNS validation. Add the CNAME record in GoDaddy and give it a few minutes.
-
 **Status page shows "Access Denied"**  
 The CloudFront distribution may still be deploying (takes 5–15 minutes after the first apply). If it persists, verify the S3 bucket policy allows CloudFront OAC access.
+
+**`status.markandrewmarquez.com` returns NXDOMAIN**  
+The Route 53 A/AAAA alias records are managed by Terraform. Run `terraform plan` to check if they exist in state. If the records are missing (e.g. after a DNS migration), run `terraform apply` to recreate them — no manual DNS changes are needed.
 
 **Canary passes but alarm is firing**  
 Check the alarm's `treat_missing_data` setting. Alarms are configured to treat missing data as breaching — if the canary didn't run (e.g., during a deployment), the alarm fires. It will auto-resolve on the next successful run.
@@ -211,10 +191,7 @@ To remove all AWS resources created by this project:
 terraform destroy
 ```
 
-Terraform will show you everything it's about to delete. Type `yes` to confirm. After destruction:
-
-- Remove the two CNAME records from GoDaddy DNS (ACM validation + status page)
-- The S3 buckets are set to `force_destroy = true`, so Terraform handles object cleanup automatically
+Terraform will show you everything it's about to delete. Type `yes` to confirm. The S3 buckets are set to `force_destroy = true`, so Terraform handles object cleanup automatically. Route 53 records created by this project (the status subdomain aliases and ACM validation CNAMEs) are also removed — the hosted zone itself is not touched since it is managed outside this project.
 
 ---
 

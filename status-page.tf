@@ -5,12 +5,22 @@
 #   • S3 bucket for static hosting (index.html + status.json)
 #   • CloudFront distribution with custom domain + HTTPS
 #   • ACM certificate for status.markandrewmarquez.com
+#   • Route 53 records: ACM validation + status subdomain alias
 #   • Lambda function to generate status.json from CloudWatch
 #   • EventBridge rule to trigger the Lambda every 5 minutes
 # ──────────────────────────────────────────────────────────────
 
 # ── Data: current AWS account ID ─────────────────────────────
 data "aws_caller_identity" "current" {}
+
+# ── Data: Route 53 hosted zone for the apex domain ───────────
+# The zone is managed outside this project (it was migrated
+# from GoDaddy to Route 53 and hosts the apex domain too).
+# We look it up by name and reference its zone_id for records.
+data "aws_route53_zone" "root" {
+  name         = "markandrewmarquez.com"
+  private_zone = false
+}
 
 # ══════════════════════════════════════════════════════════════
 # S3 BUCKET — Static status page hosting
@@ -99,15 +109,35 @@ resource "aws_acm_certificate" "status_page" {
   }
 }
 
-# Wait for the certificate to be validated.
-# terraform apply will PAUSE here until you add the DNS record
-# in GoDaddy. See the outputs for the exact CNAME to add.
-resource "aws_acm_certificate_validation" "status_page" {
-  certificate_arn = aws_acm_certificate.status_page.arn
+# Create the DNS validation CNAME records in Route 53
+# automatically. ACM emits one domain_validation_options entry
+# per domain on the cert; for_each creates a record for each.
+resource "aws_route53_record" "status_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.status_page.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
 
-  # No validation_record_fqdns — we can't auto-create DNS
-  # records since DNS is on GoDaddy, not Route 53.
-  # Terraform will poll until the cert is validated.
+  # allow_overwrite handles the case where a prior validation
+  # record exists (e.g. from a previous cert that used the same
+  # token). Safe for a single-account, single-project setup.
+  allow_overwrite = true
+  zone_id         = data.aws_route53_zone.root.zone_id
+  name            = each.value.name
+  type            = each.value.type
+  records         = [each.value.record]
+  ttl             = 60
+}
+
+# Wait for the certificate to be validated.
+# Now that Route 53 auto-creates the validation records, this
+# resolves in ~30-60 seconds instead of requiring manual DNS.
+resource "aws_acm_certificate_validation" "status_page" {
+  certificate_arn         = aws_acm_certificate.status_page.arn
+  validation_record_fqdns = [for r in aws_route53_record.status_cert_validation : r.fqdn]
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -187,6 +217,38 @@ resource "aws_cloudfront_distribution" "status_page" {
 
   tags = {
     Project = var.project_name
+  }
+}
+
+# ── Route 53 alias: status.markandrewmarquez.com → CloudFront ─
+# Using an A-record alias (not a CNAME) for two reasons:
+#   1. AWS recommends aliases for subdomains pointing to
+#      CloudFront — they resolve faster than CNAME lookups.
+#   2. Alias queries to AWS targets are free (no Route 53
+#      query charges).
+resource "aws_route53_record" "status_page" {
+  zone_id = data.aws_route53_zone.root.zone_id
+  name    = var.status_page_domain
+  type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.status_page.domain_name
+    zone_id                = aws_cloudfront_distribution.status_page.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+# IPv6 AAAA alias — CloudFront supports IPv6 (is_ipv6_enabled
+# above), so add an AAAA record pointing to the same target.
+resource "aws_route53_record" "status_page_ipv6" {
+  zone_id = data.aws_route53_zone.root.zone_id
+  name    = var.status_page_domain
+  type    = "AAAA"
+
+  alias {
+    name                   = aws_cloudfront_distribution.status_page.domain_name
+    zone_id                = aws_cloudfront_distribution.status_page.hosted_zone_id
+    evaluate_target_health = false
   }
 }
 
