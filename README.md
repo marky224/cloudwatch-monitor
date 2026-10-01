@@ -92,15 +92,26 @@ copy .tfbackend.example .tfbackend
 
 Edit `.tfbackend` and set the name of your state bucket. This file is gitignored.
 
+`backend.tf` sets the state bucket's region to `us-east-1`. If your bucket is in another region, also add `region = "<your-region>"` to `.tfbackend`.
+
 ### 3. Initialize and deploy
 
 ```powershell
-terraform init -backend-config=.tfbackend
+terraform init -backend-config=".tfbackend"
 terraform plan    # Review what will be created
 terraform apply   # Type "yes" to deploy
 ```
 
 ![Terraform apply output showing created resources and outputs](images/terraform-apply.jpg)
+
+Keep the quotes around `".tfbackend"` — PowerShell splits the unquoted argument at the `.`.
+
+> **Already deployed with local state?** If this checkout still has a local `terraform.tfstate`, move it into S3 instead of starting fresh:
+>
+> 1. Back up `terraform.tfstate` to a folder outside the repo.
+> 2. Run `terraform init -migrate-state -backend-config=".tfbackend"` and answer `yes` to copy the existing state.
+> 3. Run `terraform plan` — it must say **No changes**.
+> 4. Delete the local `terraform.tfstate` and `terraform.tfstate.backup`.
 
 ### 4. Confirm the SNS email subscription
 

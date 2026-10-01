@@ -1,6 +1,6 @@
 # Copy this file to .tfbackend (gitignored) and set the name of your
 # Terraform state bucket. The other backend settings are in backend.tf.
 #
-#   terraform init -backend-config=.tfbackend
+#   terraform init -backend-config=".tfbackend"
 
 bucket = "<STATE_BUCKET_NAME>"
