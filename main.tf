@@ -5,12 +5,11 @@
 #   • The Terraform version constraint and required providers
 #   • The default AWS provider region
 #
-# State is stored locally (terraform.tfstate). For a personal
-# project this is fine — just don't delete the file.
+# State is stored remotely in S3 — see backend.tf.
 # ──────────────────────────────────────────────────────────────
 
 terraform {
-  required_version = ">= 1.5.0"
+  required_version = ">= 1.11.0" # S3 native locking (use_lockfile)
 
   required_providers {
     aws = {

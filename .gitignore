@@ -4,6 +4,10 @@
 .terraform/
 .terraform.lock.hcl
 
+# Backend config — holds the state bucket name (contains the account ID)
+*.tfbackend
+!*.tfbackend.example
+
 # Variable overrides with sensitive values
 terraform.tfvars
 
