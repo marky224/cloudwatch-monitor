@@ -85,7 +85,7 @@ variable "monitors" {
     },
     {
       name = "ollama-registry"
-      url  = "https://registry.ollama.ai/"
+      url  = "https://registry.ollama.ai/v2/library/llama3.2/manifests/latest"
       type = "website"
     },
     {

@@ -143,15 +143,25 @@ resource "aws_iam_role_policy" "canary_permissions" {
 # and the archive_file data source zips it into the directory
 # structure that Synthetics expects:
 #   nodejs/node_modules/index.js
+#
+# The zip name includes the first 12 hex chars of the rendered
+# script's sha256. aws_synthetics_canary only re-uploads code when
+# zip_file (the path) changes, not the zip's contents, so any change
+# to the monitors list or the template must change the path.
+
+locals {
+  canary_script = templatefile("${path.module}/canary-script/index.js.tftpl", {
+    monitors = var.monitors
+  })
+  canary_zip_path = "${path.module}/canary-script/canary-${substr(sha256(local.canary_script), 0, 12)}.zip"
+}
 
 data "archive_file" "canary_script" {
   type        = "zip"
-  output_path = "${path.module}/canary-script/canary.zip"
+  output_path = local.canary_zip_path
 
   source {
-    content = templatefile("${path.module}/canary-script/index.js.tftpl", {
-      monitors = var.monitors
-    })
+    content  = local.canary_script
     filename = "nodejs/node_modules/index.js"
   }
 }

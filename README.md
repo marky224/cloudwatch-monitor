@@ -18,7 +18,7 @@ A lightweight, budget-friendly infrastructure monitoring system built on AWS Clo
 | MS Graph API | `graph.microsoft.com/v1.0/$metadata` | API (validates XML schema) |
 | Azure DevOps Status | `status.dev.azure.com/_apis/status/health` | API (validates JSON `status` field) |
 | Docker Hub | `hub.docker.com` | Website (HTTP 200) |
-| Ollama Registry | `registry.ollama.ai` | Website (HTTP 200) |
+| Ollama Registry | `registry.ollama.ai/v2/library/llama3.2/manifests/latest` | Website (HTTP 200) |
 | M365 Portal | `office.com` | Website (HTTP 200) |
 
 To add, remove, or change endpoints, edit the `monitors` list in `variables.tf` and run `terraform apply`. Terraform handles the rest — canary script, alarms, and dashboard all update automatically.
