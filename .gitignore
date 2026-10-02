@@ -4,6 +4,15 @@
 .terraform/
 .terraform.lock.hcl
 
+# Backend config — holds the state bucket name (contains the account ID)
+*.tfbackend
+!*.tfbackend.example
+
+# Saved plans (contain the full state) and local override files
+*.tfplan
+tfplan
+*_override.tf
+
 # Variable overrides with sensitive values
 terraform.tfvars
 

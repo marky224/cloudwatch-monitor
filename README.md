@@ -54,9 +54,10 @@ CloudWatch Synthetics charges per canary, not per check. By running all endpoint
 
 ## Prerequisites
 
-- [Terraform](https://developer.hashicorp.com/terraform/install) ≥ 1.5
+- [Terraform](https://developer.hashicorp.com/terraform/install) ≥ 1.11 (for S3 native state locking)
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) with credentials configured
 - An AWS account with permissions for S3, IAM, Lambda, CloudWatch, CloudFront, ACM, Route 53, and Synthetics
+- A private S3 bucket for Terraform state (versioned and encrypted). This project doesn't create it — use your own state bucket.
 
 ```powershell
 # Install (Windows)
@@ -81,23 +82,44 @@ copy terraform.tfvars.example terraform.tfvars
 
 Edit `terraform.tfvars` and set your email address. This file is gitignored — your email stays out of version control.
 
-### 2. Initialize and deploy
+### 2. Configure the state backend
+
+State is stored in S3 (see `backend.tf`). The bucket name is kept out of the repo:
 
 ```powershell
-terraform init
+copy .tfbackend.example .tfbackend
+```
+
+Edit `.tfbackend` and set the name of your state bucket. This file is gitignored.
+
+`backend.tf` sets the state bucket's region to `us-east-1`. If your bucket is in another region, also add `region = "<your-region>"` to `.tfbackend`.
+
+### 3. Initialize and deploy
+
+```powershell
+terraform init -backend-config=".tfbackend"
 terraform plan    # Review what will be created
 terraform apply   # Type "yes" to deploy
 ```
 
 ![Terraform apply output showing created resources and outputs](images/terraform-apply.jpg)
 
-### 3. Confirm the SNS email subscription
+Keep the quotes around `".tfbackend"` — PowerShell splits the unquoted argument at the `.`.
+
+> **Already deployed with local state?** If this checkout still has a local `terraform.tfstate`, move it into S3 instead of starting fresh:
+>
+> 1. Back up `terraform.tfstate` to a folder outside the repo.
+> 2. Run `terraform init -migrate-state -backend-config=".tfbackend"` and answer `yes` to copy the existing state.
+> 3. Run `terraform plan` — it must say **No changes**.
+> 4. Delete the local `terraform.tfstate` and `terraform.tfstate.backup`.
+
+### 4. Confirm the SNS email subscription
 
 AWS sends a confirmation email to the address in `terraform.tfvars` after the first apply. **You must click the confirmation link** or alarm notifications will not be delivered.
 
 ![Example alarm notification email from SNS](images/alarm-email.jpg)
 
-### 4. Verify everything is running
+### 5. Verify everything is running
 
 - **Canary:** [CloudWatch Synthetics console](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#synthetics:canary/list) — look for a green "Running" status
 - **Status page:** Visit [status.markandrewmarquez.com](https://status.markandrewmarquez.com)
@@ -141,6 +163,7 @@ Terraform automatically updates the canary script, creates or removes CloudWatch
 ```
 cloudwatch-monitor/
 ├── main.tf                  # Terraform + AWS provider config
+├── backend.tf               # S3 remote state (bucket name comes from .tfbackend)
 ├── variables.tf             # Endpoints, interval, email, domain settings
 ├── canary.tf                # S3 artifacts bucket, IAM role, Synthetics canary
 ├── alarms.tf                # SNS topic + per-endpoint CloudWatch Alarms
@@ -148,6 +171,7 @@ cloudwatch-monitor/
 ├── dashboard.tf             # CloudWatch dashboard (metrics visualization)
 ├── outputs.tf               # Console URLs, status page URL
 ├── terraform.tfvars.example # Template for sensitive variables (safe to commit)
+├── .tfbackend.example       # Template for the state bucket name (safe to commit)
 ├── .gitignore               # Excludes state files, secrets, build artifacts
 ├── canary-script/
 │   └── index.js.tftpl       # Canary script template (Terraform renders at deploy)
@@ -178,6 +202,9 @@ The CloudFront distribution may still be deploying (takes 5–15 minutes after t
 **`status.markandrewmarquez.com` returns NXDOMAIN**  
 The Route 53 A/AAAA alias records are managed by Terraform. Run `terraform plan` to check if they exist in state. If the records are missing (e.g. after a DNS migration), run `terraform apply` to recreate them — no manual DNS changes are needed.
 
+**`Error acquiring the state lock`**  
+A previous run was interrupted and left its lock file in the state bucket. Make sure no other Terraform run is in progress, then run `terraform force-unlock <LOCK_ID>` with the ID shown in the error.
+
 **Canary passes but alarm is firing**  
 Check the alarm's `treat_missing_data` setting. Alarms are configured to treat missing data as breaching — if the canary didn't run (e.g., during a deployment), the alarm fires. It will auto-resolve on the next successful run.
 
@@ -201,7 +228,8 @@ This is a public repository. Sensitive information is kept out of version contro
 
 - **AWS credentials** live in `~/.aws/credentials` on the local machine — never in the repo
 - **`terraform.tfvars`** (contains the alert email) is gitignored
-- **`*.tfstate` files** (contain account IDs and resource ARNs) are gitignored
+- **Terraform state** (contains account IDs and resource ARNs) lives in a private, versioned, encrypted S3 bucket — never in the repo
+- **`.tfbackend`** (contains the state bucket name, which includes the account ID) is gitignored
 - **S3 artifact buckets** have public access fully blocked
 
 ---
