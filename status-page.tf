@@ -179,8 +179,8 @@ resource "aws_cloudfront_distribution" "status_page" {
     # Override with a short TTL so status.json updates propagate
     # within a few minutes.
     min_ttl     = 0
-    default_ttl = 60   # 1 minute default
-    max_ttl     = 300  # 5 minutes max
+    default_ttl = 60  # 1 minute default
+    max_ttl     = 300 # 5 minutes max
 
     forwarded_values {
       query_string = false

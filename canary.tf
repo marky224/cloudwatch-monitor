@@ -176,7 +176,7 @@ data "archive_file" "canary_script" {
 # runtime (Node.js 22.x, Puppeteer 24.x).
 
 resource "aws_synthetics_canary" "monitor" {
-  name                 = "${var.project_name}"
+  name                 = var.project_name
   artifact_s3_location = "s3://${aws_s3_bucket.canary_artifacts.id}/"
   execution_role_arn   = aws_iam_role.canary_execution.arn
   handler              = "index.handler"
