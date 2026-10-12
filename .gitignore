@@ -12,6 +12,7 @@
 *.tfplan
 tfplan
 *_override.tf
+override.tf
 
 # Variable overrides with sensitive values
 terraform.tfvars
