@@ -111,7 +111,7 @@ resource "aws_cloudwatch_dashboard" "monitor" {
           width  = 24
           height = 3
           properties = {
-            title  = "Alarm Status"
+            title = "Alarm Status"
             alarms = [
               for m in var.monitors :
               aws_cloudwatch_metric_alarm.endpoint_alarms[m.name].arn
