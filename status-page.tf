@@ -7,6 +7,7 @@
 #   • ACM certificate for status.markandrewmarquez.com
 #   • Route 53 records: ACM validation + status subdomain alias
 #   • Lambda function to generate status.json from CloudWatch
+#     alarm states and metrics
 #   • EventBridge rule to trigger the Lambda every 5 minutes
 # ──────────────────────────────────────────────────────────────
 
@@ -253,7 +254,7 @@ resource "aws_route53_record" "status_page_ipv6" {
 }
 
 # ══════════════════════════════════════════════════════════════
-# LAMBDA — Generate status.json from CloudWatch metrics
+# LAMBDA — Generate status.json from CloudWatch alarms + metrics
 # ══════════════════════════════════════════════════════════════
 
 # Package the Python script into a zip for Lambda.
@@ -284,7 +285,8 @@ resource "aws_iam_role" "status_lambda" {
   }
 }
 
-# Permissions: read CloudWatch metrics + write status.json to S3 + logs.
+# Permissions: read CloudWatch metrics + this project's alarm states,
+# write status.json to S3, and write logs.
 data "aws_iam_policy_document" "status_lambda_permissions" {
   # Query CloudWatch for canary metrics.
   statement {
@@ -294,6 +296,14 @@ data "aws_iam_policy_document" "status_lambda_permissions" {
       "cloudwatch:GetMetricData",
     ]
     resources = ["*"]
+  }
+
+  # Read the current state of this project's endpoint alarms only.
+  statement {
+    sid       = "AlarmStateRead"
+    effect    = "Allow"
+    actions   = ["cloudwatch:DescribeAlarms"]
+    resources = [for a in aws_cloudwatch_metric_alarm.endpoint_alarms : a.arn]
   }
 
   # Write status.json to the status page S3 bucket.
@@ -339,6 +349,7 @@ resource "aws_lambda_function" "status_generator" {
     variables = {
       CANARY_NAME = aws_synthetics_canary.monitor.name
       MONITORS    = jsonencode(var.monitors)
+      ALARM_NAMES = jsonencode({ for k, a in aws_cloudwatch_metric_alarm.endpoint_alarms : k => a.alarm_name })
       BUCKET_NAME = aws_s3_bucket.status_page.id
     }
   }
