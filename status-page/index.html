@@ -71,6 +71,17 @@
       color: var(--text);
     }
 
+    /* ── Stale Data Banner ─────────────────────────────────── */
+    .stale-banner {
+      padding: 12px 22px;
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      background: var(--amber-bg);
+      color: var(--amber);
+    }
+
     /* ── Overall Status Banner ─────────────────────────────── */
     .overall-banner {
       display: flex;
@@ -160,16 +171,23 @@
       font-weight: 500;
     }
 
+    .endpoint-state {
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+
+    .endpoint-state.operational { color: var(--green); }
+    .endpoint-state.degraded    { color: var(--amber); }
+    .endpoint-state.outage      { color: var(--red);   }
+    .endpoint-state.unknown     { color: var(--gray);  }
+
     .endpoint-uptime {
       font-size: 14px;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
+      color: var(--text-dim);
     }
-
-    .endpoint-uptime.operational { color: var(--green); }
-    .endpoint-uptime.degraded    { color: var(--amber); }
-    .endpoint-uptime.outage      { color: var(--red);   }
-    .endpoint-uptime.unknown     { color: var(--gray);  }
 
     /* ── 90-Day Uptime Bar ─────────────────────────────────── */
     .uptime-bar {
@@ -301,6 +319,9 @@
       <div class="subtitle">Monitoring for <a href="https://markandrewmarquez.com" target="_blank" rel="noopener">Mark Marquez</a>'s infrastructure</div>
     </div>
 
+    <!-- Stale data warning (shown by JS) -->
+    <div id="stale-banner" class="stale-banner" hidden></div>
+
     <!-- Overall status banner -->
     <div id="overall-banner" class="overall-banner loading">
       <div class="status-dot loading"></div>
@@ -327,6 +348,43 @@
       outage:      'Service Outage Detected',
       unknown:     'Gathering Data…',
     };
+
+    const STATE_LABELS = {
+      operational: 'Operational',
+      degraded:    'Degraded',
+      outage:      'Outage',
+      unknown:     'Unknown',
+    };
+
+    // ── Stale data check ──────────────────────────────────────
+    // The Lambda rewrites status.json every 5 minutes, so data
+    // older than 15 minutes means updates have stopped.
+    const STALE_AFTER_MS = 15 * 60 * 1000;
+
+    function isStale(lastUpdated, nowMs) {
+      const updatedMs = Date.parse(lastUpdated);
+      if (Number.isNaN(updatedMs)) return true;
+      return nowMs - updatedMs > STALE_AFTER_MS;
+    }
+
+    // last_updated from the most recent status.json; undefined
+    // until the first successful load.
+    let lastUpdated;
+
+    function checkStale() {
+      if (lastUpdated === undefined) return;
+      const banner = document.getElementById('stale-banner');
+      const nowMs = Date.now();
+      if (!isStale(lastUpdated, nowMs)) {
+        banner.hidden = true;
+        return;
+      }
+      const minutes = Math.floor((nowMs - Date.parse(lastUpdated)) / 60000);
+      banner.textContent = Number.isNaN(minutes)
+        ? 'Status data has no valid timestamp, so the states below may be out of date.'
+        : `Status data is ${minutes} minutes old. Checks may have stopped, so the states below may be out of date.`;
+      banner.hidden = false;
+    }
 
     // ── Formatting helpers ────────────────────────────────────
     function fmtPct(val) {
@@ -355,6 +413,8 @@
 
     // ── Render the status page ────────────────────────────────
     function render(data) {
+      lastUpdated = data.last_updated ?? null;
+
       // Overall banner
       const banner = document.getElementById('overall-banner');
       const status = data.overall_status || 'unknown';
@@ -391,9 +451,9 @@
           <div class="endpoint">
             <div class="endpoint-header">
               <div class="status-dot ${epStatus}"></div>
-              <span class="endpoint-name">${ep.display_name}</span>
+              <span class="endpoint-name">${ep.display_name}<span class="endpoint-state ${epStatus}">${STATE_LABELS[epStatus] || epStatus}</span></span>
               <span class="endpoint-type">${ep.type}</span>
-              <span class="endpoint-uptime ${epStatus}">${uptimePct}</span>
+              <span class="endpoint-uptime">${uptimePct}</span>
             </div>
             <div class="uptime-bar">${barHtml}</div>
             <div class="uptime-range">
@@ -441,6 +501,9 @@
           container.innerHTML =
             '<div class="error-msg">Unable to load status data. The status page may still be initializing — try again in a few minutes.</div>';
         }
+      } finally {
+        // Runs on failed refreshes too, so a stalled page still warns.
+        checkStale();
       }
     }
 

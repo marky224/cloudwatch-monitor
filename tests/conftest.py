@@ -46,6 +46,10 @@ def gs(monkeypatch):
     """A freshly loaded generate-status module with stubbed clients."""
     for key, value in ENV.items():
         monkeypatch.setenv(key, value)
+    # A named profile in the caller's shell would fail against the
+    # empty config file before any stub is reached.
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+    monkeypatch.delenv("AWS_DEFAULT_PROFILE", raising=False)
 
     # The hyphen in the file name rules out a normal import.
     spec = importlib.util.spec_from_file_location("generate_status", SCRIPT)

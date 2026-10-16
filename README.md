@@ -1,6 +1,6 @@
 # CloudWatch Infrastructure Monitor
 
-A lightweight, budget-friendly infrastructure monitoring system built on AWS CloudWatch Synthetics and managed entirely with Terraform. A single canary checks 7 endpoints every 30 minutes, CloudWatch Alarms trigger email alerts on failures, and a public status page shows real-time uptime history.
+A lightweight, budget-friendly infrastructure monitoring system built on AWS CloudWatch Synthetics and managed entirely with Terraform. A single canary checks 7 endpoints every 30 minutes, CloudWatch Alarms trigger email alerts on failures, and a public status page shows each service's current state alongside 90-day uptime history.
 
 **Live status page:** [status.markandrewmarquez.com](https://status.markandrewmarquez.com)  
 **Monthly cost:** ~$1.73 (single canary at 30-min intervals; Lambda, S3, CloudFront, and CloudWatch fall within free tier)
@@ -11,15 +11,17 @@ A lightweight, budget-friendly infrastructure monitoring system built on AWS Clo
 
 ## What It Monitors
 
-| Endpoint | URL | Check Type |
-|----------|-----|------------|
-| Portfolio Site | `markandrewmarquez.com` | Website (HTTP 200) |
-| GitHub Status | `githubstatus.com/api/v2/status.json` | API (validates JSON structure) |
-| MS Graph API | `graph.microsoft.com/v1.0/$metadata` | API (validates XML schema) |
-| Azure DevOps Status | `status.dev.azure.com/_apis/status/health` | API (validates JSON `status` field) |
-| Docker Hub | `hub.docker.com` | Website (HTTP 200) |
-| Ollama Registry | `registry.ollama.ai/v2/library/llama3.2/manifests/latest` | Website (HTTP 200) |
-| M365 Portal | `office.com` | Website (HTTP 200) |
+| Endpoint | URL | Type |
+|----------|-----|------|
+| Portfolio Site | `markandrewmarquez.com` | Website |
+| GitHub Status | `githubstatus.com/api/v2/status.json` | API |
+| MS Graph API | `graph.microsoft.com/v1.0/$metadata` | API |
+| Azure DevOps Status | `status.dev.azure.com/_apis/status/health` | API |
+| Docker Hub | `hub.docker.com` | Website |
+| Ollama Registry | `registry.ollama.ai/v2/library/llama3.2/manifests/latest` | Website |
+| M365 Portal | `office.com` | Website |
+
+Every check passes on an HTTP 2xx or 3xx response. The type is a label on the status page.
 
 To add, remove, or change endpoints, edit the `monitors` list in `variables.tf` and run `terraform apply`. Terraform handles the rest — canary script, alarms, and dashboard all update automatically.
 
@@ -39,7 +41,7 @@ CloudWatch Synthetics Canary (every 30 min)
 │
 └──▶ Lambda (every 5 min)
         │
-        └──▶ Queries CloudWatch metrics
+        └──▶ Reads alarm states + uptime metrics
              └──▶ Writes status.json to S3
                   └──▶ CloudFront ──▶ status.markandrewmarquez.com
 ```
@@ -49,6 +51,12 @@ CloudWatch Synthetics Canary (every 30 min)
 CloudWatch Synthetics charges per canary, not per check. By running all endpoints as separate `executeHttpStep()` calls inside a single canary, each endpoint still gets its own `SuccessPercent` metric and its own CloudWatch Alarm — but the bill stays at ~$1.73/month instead of ~$12.
 
 ![Synthetics canary detail page showing success rate over time](images/canary-console.jpg)
+
+### Current state vs. uptime
+
+Each row on the status page shows two things. The **current state** is the endpoint's CloudWatch Alarm, the same signal that sends the email: `OK` is operational, `ALARM` is an outage, and an alarm with no data yet is unknown. A single failed run doesn't turn the row red. While the alarm is still `OK` but the latest run failed, the row shows **degraded** until the next run clears it or the alarm fires. The **uptime history** (the 24h, 7d, 30d and 90d figures and the 90-day bar) comes from the same `SuccessPercent` metric and sits alongside.
+
+The page also checks its own data. If `status.json` is more than 15 minutes old, a banner says so.
 
 ---
 
@@ -117,8 +125,6 @@ Keep the quotes around `".tfbackend"` — PowerShell splits the unquoted argumen
 
 AWS sends a confirmation email to the address in `terraform.tfvars` after the first apply. **You must click the confirmation link** or alarm notifications will not be delivered.
 
-![Example alarm notification email from SNS](images/alarm-email.jpg)
-
 ### 5. Verify everything is running
 
 - **Canary:** [CloudWatch Synthetics console](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#synthetics:canary/list) — look for a green "Running" status
@@ -140,7 +146,7 @@ variable "monitors" {
     {
       name = "my-new-service"
       url  = "https://example.com/health"
-      type = "api"      # "website" (HTTP 200 check) or "api" (validates response body)
+      type = "api"      # "website" or "api", a label on the status page
     },
     # ... existing endpoints ...
   ]
@@ -170,6 +176,7 @@ cloudwatch-monitor/
 ├── status-page.tf           # S3, CloudFront, ACM cert, Route 53 records, Lambda, EventBridge
 ├── dashboard.tf             # CloudWatch dashboard (metrics visualization)
 ├── outputs.tf               # Console URLs, status page URL
+├── requirements-dev.txt     # Test-only Python dependencies (pytest, boto3)
 ├── terraform.tfvars.example # Template for sensitive variables (safe to commit)
 ├── .tfbackend.example       # Template for the state bucket name (safe to commit)
 ├── .gitignore               # Excludes state files, secrets, build artifacts
@@ -179,11 +186,14 @@ cloudwatch-monitor/
 │   ├── status-page.jpg      # Public status page with all endpoints
 │   ├── canary-console.jpg   # Synthetics canary detail + success rate graph
 │   ├── terraform-apply.jpg  # Terminal output after a successful apply
-│   ├── alarm-email.jpg      # Example SNS alarm notification email
 │   └── cloudwatch-alarms.jpg # CloudWatch Alarms list in OK state
-└── status-page/
-    ├── index.html            # Public status page (static HTML/CSS/JS)
-    └── generate-status.py    # Lambda function: CloudWatch metrics → status.json
+├── status-page/
+│   ├── index.html            # Public status page (static HTML/CSS/JS)
+│   └── generate-status.py    # Lambda function: alarm states + metrics → status.json
+└── tests/
+    ├── conftest.py           # Loads the Lambda with stubbed AWS clients
+    ├── test_generate_status.py # Status mapping and status.json output (no AWS calls)
+    └── test_stale_check.py   # The page's 15-minute stale-data check (runs under node)
 ```
 
 ---
@@ -198,6 +208,9 @@ Make sure you clicked the SNS subscription confirmation link. Check your spam fo
 
 **Status page shows "Access Denied"**  
 The CloudFront distribution may still be deploying (takes 5–15 minutes after the first apply). If it persists, verify the S3 bucket policy allows CloudFront OAC access.
+
+**Status page says the data is out of date**  
+The status Lambda hasn't written `status.json` for over 15 minutes. Check its logs in CloudWatch Logs under `/aws/lambda/<project_name>-status-generator`.
 
 **`status.markandrewmarquez.com` returns NXDOMAIN**  
 The Route 53 A/AAAA alias records are managed by Terraform. Run `terraform plan` to check if they exist in state. If the records are missing (e.g. after a DNS migration), run `terraform apply` to recreate them — no manual DNS changes are needed.
