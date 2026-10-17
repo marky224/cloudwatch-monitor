@@ -7,6 +7,8 @@ A lightweight, budget-friendly infrastructure monitoring system built on AWS Clo
 
 ![Public status page showing all 7 endpoints](images/status-page.jpg)
 
+*Ollama Registry's red days through Oct 1, 2026 came from a misconfigured check (since fixed), not an outage.*
+
 ---
 
 ## What It Monitors
