@@ -367,6 +367,17 @@
       return nowMs - updatedMs > STALE_AFTER_MS;
     }
 
+    // Age in the largest whole unit: "42 minutes", "3 hours", "2 days".
+    function formatAge(ageMs) {
+      const minutes = Math.floor(ageMs / 60000);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+      const [n, unit] = days >= 1 ? [days, 'day']
+        : hours >= 1 ? [hours, 'hour']
+        : [minutes, 'minute'];
+      return `${n} ${unit}${n === 1 ? '' : 's'}`;
+    }
+
     // last_updated from the most recent status.json; undefined
     // until the first successful load.
     let lastUpdated;
@@ -379,10 +390,10 @@
         banner.hidden = true;
         return;
       }
-      const minutes = Math.floor((nowMs - Date.parse(lastUpdated)) / 60000);
-      banner.textContent = Number.isNaN(minutes)
+      const ageMs = nowMs - Date.parse(lastUpdated);
+      banner.textContent = Number.isNaN(ageMs)
         ? 'Status data has no valid timestamp, so the states below may be out of date.'
-        : `Status data is ${minutes} minutes old. Checks may have stopped, so the states below may be out of date.`;
+        : `Status data is ${formatAge(ageMs)} old. Checks may have stopped, so the states below may be out of date.`;
       banner.hidden = false;
     }
 

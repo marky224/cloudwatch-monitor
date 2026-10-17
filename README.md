@@ -46,17 +46,29 @@ CloudWatch Synthetics Canary (every 30 min)
                   └──▶ CloudFront ──▶ status.markandrewmarquez.com
 ```
 
-### Why one canary instead of seven?
+---
+
+## Design notes
+
+### One canary, many steps
 
 CloudWatch Synthetics charges per canary, not per check. By running all endpoints as separate `executeHttpStep()` calls inside a single canary, each endpoint still gets its own `SuccessPercent` metric and its own CloudWatch Alarm — but the bill stays at ~$1.73/month instead of ~$12.
 
 ![Synthetics canary detail page showing success rate over time](images/canary-console.jpg)
 
-### Current state vs. uptime
+### Canary code keyed by content
+
+Terraform's `aws_synthetics_canary` resource uploads new code when the `zip_file` path differs from the last apply; it doesn't look inside the zip. So `canary.tf` builds the file name from the first 12 hex characters of the rendered script's SHA-256 (`canary-<hash>.zip`). Editing the `monitors` list or the template changes the script, and with it the path, and the next `terraform apply` uploads the new code.
+
+### Missing data counts as a failure
+
+Every alarm sets `treat_missing_data = "breaching"`. A single missed run changes nothing. Once the canary has been stopped long enough that no successful run is left in the alarm's evaluation window (more than an hour at the default 30-minute interval), the missing runs count as failures: every alarm fires, every row on the status page turns red and the email goes out. A stopped canary can't stay green.
+
+### Current state from the alarm
 
 Each row on the status page shows two things. The **current state** is the endpoint's CloudWatch Alarm, the same signal that sends the email: `OK` is operational, `ALARM` is an outage, and an alarm with no data yet is unknown. A single failed run doesn't turn the row red. While the alarm is still `OK` but the latest run failed, the row shows **degraded** until the next run clears it or the alarm fires. The **uptime history** (the 24h, 7d, 30d and 90d figures and the 90-day bar) comes from the same `SuccessPercent` metric and sits alongside.
 
-The page also checks its own data. If `status.json` is more than 15 minutes old, a banner says so.
+The page also checks its own data. If `status.json` is more than 15 minutes old, a banner says so and gives its age in minutes, hours or days.
 
 ---
 
@@ -219,7 +231,7 @@ The Route 53 A/AAAA alias records are managed by Terraform. Run `terraform plan`
 A previous run was interrupted and left its lock file in the state bucket. Make sure no other Terraform run is in progress, then run `terraform force-unlock <LOCK_ID>` with the ID shown in the error.
 
 **Canary passes but alarm is firing**  
-Check the alarm's `treat_missing_data` setting. Alarms are configured to treat missing data as breaching — if the canary didn't run (e.g., during a deployment), the alarm fires. It will auto-resolve on the next successful run.
+Check the alarm's `treat_missing_data` setting. Alarms are configured to treat missing data as breaching — once the canary has been stopped long enough that no successful run is left in the alarm's evaluation window, the alarm fires. It will auto-resolve on the next successful run.
 
 ---
 
