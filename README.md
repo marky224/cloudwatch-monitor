@@ -58,11 +58,11 @@ CloudWatch Synthetics charges per canary, not per check. By running all endpoint
 
 ### Canary code keyed by content
 
-The AWS provider re-uploads a canary's code only when its `zip_file` path changes, not when the zip's contents do. So the zip name carries a hash of the rendered script (`canary-<sha256 prefix>.zip`, see `canary.tf`): any edit to the `monitors` list or the template produces a new path, and `terraform apply` ships the new script.
+Terraform's `aws_synthetics_canary` resource uploads new code when the `zip_file` path differs from the last apply; it doesn't look inside the zip. So `canary.tf` builds the file name from the first 12 hex characters of the rendered script's SHA-256 (`canary-<hash>.zip`). Editing the `monitors` list or the template changes the script, and with it the path, and the next `terraform apply` uploads the new code.
 
 ### Missing data counts as a failure
 
-Every alarm sets `treat_missing_data = "breaching"`. If the canary stops running, there is no data, so every alarm fires, every row on the status page turns red, and the email goes out. A stopped monitor never looks like a healthy one.
+Every alarm sets `treat_missing_data = "breaching"`, so a run that never happens counts as a failed one. After two missed runs (about an hour at the default 30-minute interval), every alarm fires, every row on the status page turns red and the email goes out. A stopped canary can't stay green.
 
 ### Current state from the alarm
 
