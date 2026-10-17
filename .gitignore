@@ -27,3 +27,8 @@ status-page/generate-status.zip
 
 # OS files
 .DS_Store
+
+# Local Python test environment
+.venv/
+__pycache__/
+.pytest_cache/

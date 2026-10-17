@@ -24,6 +24,9 @@ variable "alert_email" {
   # You can also pass it via: terraform apply -var='alert_email=you@example.com'
 }
 
+# The status Lambda's 24h query uses 30-minute periods and reads its
+# newest value as the latest run, so the page's "latest run failed"
+# (degraded) state assumes an interval of 30 minutes or more.
 variable "canary_interval_minutes" {
   description = "How often the canary runs, in minutes. 30 min ≈ $1.73/month."
   type        = number
@@ -42,7 +45,8 @@ variable "status_page_domain" {
 # Each entry has:
 #   name — unique identifier (used in CloudWatch step names, alarm names)
 #   url  — the full URL to check
-#   type — "website" (check for HTTP 200) or "api" (validate response body)
+#   type — "website" or "api", a label shown on the status page. Every
+#          check passes on an HTTP 2xx or 3xx response.
 #
 # The canary loops through this list every run. Each endpoint
 # becomes its own executeStep(), which emits a per-step
