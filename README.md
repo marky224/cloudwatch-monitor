@@ -46,17 +46,29 @@ CloudWatch Synthetics Canary (every 30 min)
                   └──▶ CloudFront ──▶ status.markandrewmarquez.com
 ```
 
-### Why one canary instead of seven?
+---
+
+## Design notes
+
+### One canary, many steps
 
 CloudWatch Synthetics charges per canary, not per check. By running all endpoints as separate `executeHttpStep()` calls inside a single canary, each endpoint still gets its own `SuccessPercent` metric and its own CloudWatch Alarm — but the bill stays at ~$1.73/month instead of ~$12.
 
 ![Synthetics canary detail page showing success rate over time](images/canary-console.jpg)
 
-### Current state vs. uptime
+### Canary code keyed by content
+
+The AWS provider re-uploads a canary's code only when its `zip_file` path changes, not when the zip's contents do. So the zip name carries a hash of the rendered script (`canary-<sha256 prefix>.zip`, see `canary.tf`): any edit to the `monitors` list or the template produces a new path, and `terraform apply` ships the new script.
+
+### Missing data counts as a failure
+
+Every alarm sets `treat_missing_data = "breaching"`. If the canary stops running, there is no data, so every alarm fires, every row on the status page turns red, and the email goes out. A stopped monitor never looks like a healthy one.
+
+### Current state from the alarm
 
 Each row on the status page shows two things. The **current state** is the endpoint's CloudWatch Alarm, the same signal that sends the email: `OK` is operational, `ALARM` is an outage, and an alarm with no data yet is unknown. A single failed run doesn't turn the row red. While the alarm is still `OK` but the latest run failed, the row shows **degraded** until the next run clears it or the alarm fires. The **uptime history** (the 24h, 7d, 30d and 90d figures and the 90-day bar) comes from the same `SuccessPercent` metric and sits alongside.
 
-The page also checks its own data. If `status.json` is more than 15 minutes old, a banner says so.
+The page also checks its own data. If `status.json` is more than 15 minutes old, a banner says so and gives its age in minutes, hours or days.
 
 ---
 
