@@ -62,7 +62,7 @@ Terraform's `aws_synthetics_canary` resource uploads new code when the `zip_file
 
 ### Missing data counts as a failure
 
-Every alarm sets `treat_missing_data = "breaching"`, so a run that never happens counts as a failed one. After two missed runs (about an hour at the default 30-minute interval), every alarm fires, every row on the status page turns red and the email goes out. A stopped canary can't stay green.
+Every alarm sets `treat_missing_data = "breaching"`. A single missed run changes nothing. Once the canary has been stopped long enough that no successful run is left in the alarm's evaluation window (more than an hour at the default 30-minute interval), the missing runs count as failures: every alarm fires, every row on the status page turns red and the email goes out. A stopped canary can't stay green.
 
 ### Current state from the alarm
 
@@ -231,7 +231,7 @@ The Route 53 A/AAAA alias records are managed by Terraform. Run `terraform plan`
 A previous run was interrupted and left its lock file in the state bucket. Make sure no other Terraform run is in progress, then run `terraform force-unlock <LOCK_ID>` with the ID shown in the error.
 
 **Canary passes but alarm is firing**  
-Check the alarm's `treat_missing_data` setting. Alarms are configured to treat missing data as breaching — if the canary didn't run (e.g., during a deployment), the alarm fires. It will auto-resolve on the next successful run.
+Check the alarm's `treat_missing_data` setting. Alarms are configured to treat missing data as breaching — once the canary has been stopped long enough that no successful run is left in the alarm's evaluation window, the alarm fires. It will auto-resolve on the next successful run.
 
 ---
 
