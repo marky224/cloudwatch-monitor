@@ -13,8 +13,9 @@
 resource "aws_s3_bucket" "canary_artifacts" {
   bucket = "${var.project_name}-canary-artifacts"
 
-  # Prevent Terraform from destroying the bucket if it still
-  # has objects in it. Set to true when you want to tear down.
+  # With force_destroy = true, `terraform destroy` deletes the
+  # bucket together with any artifacts still in it. Artifacts
+  # expire after 30 days anyway (lifecycle rule below).
   force_destroy = true
 
   tags = {

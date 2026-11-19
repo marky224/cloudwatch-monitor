@@ -49,7 +49,7 @@ variable "status_page_domain" {
 #          check passes on an HTTP 2xx or 3xx response.
 #
 # The canary loops through this list every run. Each endpoint
-# becomes its own executeStep(), which emits a per-step
+# becomes its own executeHttpStep(), which emits a per-step
 # SuccessPercent metric in CloudWatch.
 # ──────────────────────────────────────────────────────────────
 

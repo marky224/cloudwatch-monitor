@@ -46,44 +46,16 @@ output "dashboard_url" {
 # ── Status Page ──────────────────────────────────────────────
 
 output "status_page_url" {
-  description = "Public status page URL (after DNS is configured)"
+  description = "Public status page URL"
   value       = "https://${var.status_page_domain}"
 }
 
 output "status_page_cloudfront_domain" {
-  description = "CloudFront domain — use this for the GoDaddy CNAME record"
+  description = "CloudFront domain the Route 53 alias records point at"
   value       = aws_cloudfront_distribution.status_page.domain_name
 }
 
 output "status_page_bucket" {
   description = "S3 bucket hosting the status page"
   value       = aws_s3_bucket.status_page.id
-}
-
-# ── DNS INSTRUCTIONS (GoDaddy) ───────────────────────────────
-# These outputs tell you exactly what CNAME records to create
-# in GoDaddy. Two records are needed:
-#
-#   1. ACM certificate validation (add this FIRST — terraform
-#      apply will wait for it before continuing)
-#   2. Status page subdomain (add after apply finishes)
-
-output "dns_1_acm_validation_record" {
-  description = "STEP 1: Add this CNAME in GoDaddy to validate the ACM certificate (terraform apply will wait for this)"
-  value = {
-    for dvo in aws_acm_certificate.status_page.domain_validation_options : dvo.domain_name => {
-      type  = "CNAME"
-      name  = dvo.resource_record_name
-      value = dvo.resource_record_value
-    }
-  }
-}
-
-output "dns_2_status_page_cname" {
-  description = "STEP 2: Add this CNAME in GoDaddy after apply completes to point the subdomain to CloudFront"
-  value = {
-    type  = "CNAME"
-    name  = "status"
-    value = aws_cloudfront_distribution.status_page.domain_name
-  }
 }
